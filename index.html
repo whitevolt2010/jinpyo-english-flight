@@ -86,7 +86,7 @@ button:focus-visible{outline:4px solid #fff;outline-offset:3px}
 <canvas id="cv"></canvas>
 
 <div id="pad" hidden><button class="fire" id="fireB" aria-label="미사일 발사">🚀<br>발사</button></div>
-<div class="keyhelp" id="keyhelp" hidden>↑ ↓ ← → 비행 · 스페이스 발사 · R 다시 듣기</div>
+<div class="keyhelp" id="keyhelp" hidden>↑ ↓ ← → 비행 · 스페이스 발사 · R 다시 듣기 · M 지도로</div>
 <div id="rotate" hidden><div class="ph">📱</div><div>가로로 돌려 주세요!</div><div style="font-family:'Gowun Dodum';font-size:16px;opacity:.8">넓은 하늘에서 날아야 잘 보여요</div></div>
 
 <div class="scr" id="title">
@@ -147,6 +147,7 @@ const cv = $('cv'), g = cv.getContext('2d');
 const VW = 960, VH = 540;                 // 가상 화면 (16:9)
 let scale = 1, ox = 0, oy = 0, dpr = 1, cssW = 0, cssH = 0;
 const PANEL = { x: 168, y: 8, w: 624, h: 98 };
+const BTN = { snd: { x: 960 - 24, y: 26, r: 16 }, home: { x: 960 - 62, y: 26, r: 16 } };
 const SKY_TOP = 118, SKY_BOT = 524;       // 날 수 있는 구역
 
 /* ================= 배움 자료 =================
@@ -1492,6 +1493,8 @@ addEventListener('keydown', e => {
   if (e.key === 'ArrowDown' || e.key === 's') keys.d = 1;
   if (e.key === ' ') { firing = true; if (state === 'play') e.preventDefault(); }
   if (e.key === 'r' || e.key === 'R') speakQuestion();
+  if (e.key === 'm' || e.key === 'M') { if (state === 'play') { try { speechSynthesis.cancel(); } catch (er) {} renderMap(); show('map'); state = 'map'; } }
+  if (e.key === 'p' || e.key === 'P') { soundOn = !soundOn; if (!soundOn) { try { speechSynthesis.cancel(); } catch (er) {} } }
 });
 addEventListener('keyup', e => {
   if (e.key === 'ArrowLeft' || e.key === 'a') keys.l = 0;
@@ -1505,6 +1508,11 @@ function toV(e) { const r = cv.getBoundingClientRect(); return { x: (e.clientX -
 cv.addEventListener('pointerdown', e => {
   audioInit();
   const v = toV(e);
+  const near = b => (v.x - b.x) * (v.x - b.x) + (v.y - b.y) * (v.y - b.y) < (b.r + 10) * (b.r + 10);
+  if (state === 'play') {
+    if (near(BTN.snd)) { soundOn = !soundOn; SFX.tap(); if (!soundOn) { try { speechSynthesis.cancel(); } catch (er) {} } else audioInit(); return; }
+    if (near(BTN.home)) { SFX.tap(); try { speechSynthesis.cancel(); } catch (er) {} renderMap(); show('map'); state = 'map'; return; }
+  }
   if (v.x > PANEL.x && v.x < PANEL.x + PANEL.w && v.y < PANEL.y + PANEL.h) { speakQuestion(); return; } // 문제 띠를 누르면 다시 듣기
   if (state !== 'play') return;
   cv.setPointerCapture && cv.setPointerCapture(e.pointerId);
@@ -1942,15 +1950,22 @@ function drawHUD() {
   setFont(20); g.fillStyle = '#e8a300'; g.textAlign = 'left'; g.fillText('★', 24, 60);
   g.fillStyle = INK; g.fillText(String(stars), 46, 60);
   // 진행
-  const bx = VW - 186, by = 16, bw = 172, bh = 20;
-  fillRR(bx, by, bw, bh, 10, 'rgba(255,255,255,.55)');
+  const bx = VW - 162, by = 13, bw = 78, bh = 24;
+  fillRR(bx, by, bw, bh, 11, 'rgba(255,255,255,.9)');
   const p = bossHP > 0 ? 1 : Math.min(1, qIndex / PROG_MAX);
-  fillRR(bx + 3, by + 3, Math.max(6, (bw - 6) * p), bh - 6, 7, bossHP > 0 ? '#ff5d73' : '#3fb96b');
-  rr(bx, by, bw, bh, 10); stroke(3);
-  setFont(15); g.textAlign = 'center'; g.fillStyle = INK;
-  g.fillText(bossHP > 0 ? '보스 ' + bossHP : (Math.min(qIndex + 1, PROG_MAX)) + ' / ' + PROG_MAX, bx + bw / 2, by + bh / 2 + 1);
-  // 비행기 아이콘
-  setFont(19); g.textAlign = 'left'; g.fillText('✈️', bx + 4 + (bw - 30) * p, by + bh + 16);
+  fillRR(bx + 3, by + 3, Math.max(7, (bw - 6) * p), bh - 6, 8, bossHP > 0 ? '#ff5d73' : '#7fd88f');
+  rr(bx, by, bw, bh, 11); stroke(3);
+  setFont(15); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = INK;
+  g.fillText(bossHP > 0 ? '보스 ' + bossHP : (Math.min(qIndex + 1, PROG_MAX)) + '/' + PROG_MAX, bx + bw / 2, by + bh / 2 + 1);
+  setFont(16); g.fillText('✈️', bx + 8 + (bw - 16) * p, by + bh + 13);
+  // 소리 끄기 · 지도로
+  for (const b of [BTN.snd, BTN.home]) {
+    circle(b.x, b.y, b.r, 'rgba(255,255,255,.92)');
+    g.beginPath(); g.arc(b.x, b.y, b.r, 0, TAU); stroke(3);
+  }
+  setFont(17); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = INK;
+  g.fillText(soundOn ? '🔊' : '🔇', BTN.snd.x, BTN.snd.y + 1);
+  g.fillText('🗺️', BTN.home.x, BTN.home.y + 1);
 }
 function drawPanel() {
   if (!Q || (mode !== 'quiz' && mode !== 'clear')) return;
