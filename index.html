@@ -993,26 +993,26 @@ function wordQ(g, review) {
       return Object.assign(base, {
         play: 'shoot', ask: '빈칸에 알맞은 낱말을 골라요!',
         show: blankOut(sen.en, right.w), show2: sen.ko, showType: 'sen',
-        choices: shuffle([right, ...others]).map(o => ({ t: o.w, ok: o.w === right.w })),
+        choices: shuffle([right, ...others]).map(o => ({ t: o.w, ok: o.w === right.w, ko: o.k })),
         ans: right.w, en: '', read: sen.en, hintEn: sen.en, hintKo: sen.ko,
       });
     }
   }
   if (kind === 'pic2w') return Object.assign(base, {
     play: 'shoot', ask: '이 그림을 영어로 뭐라고 할까?', show: right.e, showType: 'emoji',
-    choices: shuffle([right, ...others]).map(o => ({ t: o.w, ok: o.w === right.w })), ans: right.w, en: '',
+    choices: shuffle([right, ...others]).map(o => ({ t: o.w, ok: o.w === right.w, ko: o.k })), ans: right.w, en: '',
   });
   if (kind === 'ko2w') return Object.assign(base, {
     play: 'shoot', ask: jo(right.k, ['은', '는']) + ' 영어로 뭘까?', show: (right.e ? right.e + ' ' : '') + right.k, showType: 'big',
-    choices: shuffle([right, ...others]).map(o => ({ t: o.w, ok: o.w === right.w })), ans: right.w, en: '',
+    choices: shuffle([right, ...others]).map(o => ({ t: o.w, ok: o.w === right.w, ko: o.k })), ans: right.w, en: '',
   });
   if (kind === 'w2ko') return Object.assign(base, {
     play: 'shoot', ask: '이 영어 낱말의 뜻은?', show: right.w, showType: 'word',
-    choices: shuffle([right, ...others]).map(o => ({ t: o.k, ok: o.w === right.w })), ans: right.k, en: right.w,
+    choices: shuffle([right, ...others]).map(o => ({ t: o.k, ok: o.w === right.w, en: o.w })), ans: right.k, en: right.w,
   });
   return Object.assign(base, { // listen
     play: 'gate', ask: '잘 듣고 알맞은 문으로 지나가요!', show: '🔊', showType: 'emoji',
-    choices: shuffle([right, ...others]).map(o => ({ t: o.k, ok: o.w === right.w })), ans: right.k, en: right.w,
+    choices: shuffle([right, ...others]).map(o => ({ t: o.k, ok: o.w === right.w, en: o.w })), ans: right.k, en: right.w,
   });
 }
 
@@ -1033,7 +1033,7 @@ function sentQ(g) {
     const others = pickMany(pool, 2, o => o.en === right.en || o.ko === right.ko);
     if (others.length === 2) return Object.assign(base, {
       play: 'gate', ask: '문장을 잘 듣고 알맞은 문으로!', show: '🔊', showType: 'emoji',
-      choices: shuffle([right, ...others]).map(o => ({ t: o.ko, ok: o.en === right.en })),
+      choices: shuffle([right, ...others]).map(o => ({ t: o.ko, ok: o.en === right.en, en: o.en })),
       ans: right.ko, en: right.en,
     });
   }
@@ -1056,7 +1056,7 @@ function talkQ(g) {
   return {
     key: 'T:' + right.q, play: 'shoot', ask: '알맞은 대답을 골라요!',
     show: right.q, show2: '— ?', showType: 'sen',
-    choices: shuffle([right, ...others]).map(o => ({ t: o.a, ok: o.a === right.a })),
+    choices: shuffle([right, ...others]).map(o => ({ t: o.a, ok: o.a === right.a, ko: (o.ko.split('—')[1] || o.ko).trim() })),
     ans: right.a, en: right.q, read: right.q + ' ... ' + right.a,
     hintEn: right.q + ' — ' + right.a, hintKo: right.ko,
   };
@@ -1072,7 +1072,7 @@ function makeQ(gi, review) {
   else if (!review && r < TALK_RATE[gi] + SENT_RATE[gi]) q = sentQ(g);
   else q = wordQ(g, review);
   clock++;
-  if (q.choices) q.choices = q.choices.map(c => ({ t: String(c.t), ok: !!c.ok }));
+  if (q.choices) q.choices = q.choices.map(c => ({ t: String(c.t), ok: !!c.ok, ko: c.ko || '', en: c.en || '' }));
   return q;
 }
 
@@ -1168,17 +1168,26 @@ function pickVoice() {
   const vs = speechSynthesis.getVoices();
   koVoice = vs.find(v => /ko[-_]KR/i.test(v.lang) && /Yuna|유나|Sora|Google/i.test(v.name)) || vs.find(v => /^ko/i.test(v.lang)) || null;
   const odd = /Albert|Bad News|Good News|Bahh|Bells|Boing|Bubbles|Cellos|Jester|Organ|Superstar|Trinoids|Whisper|Wobble|Zarvox|Deranged|Hysterical|Junior|Ralph|Fred|Kathy|Princess|Bruce|Rocko|Shelley|Grandma|Grandpa|Eddy|Flo|Reed|Sandy/i;
-  enVoice = vs.find(v => /en[-_]US/i.test(v.lang) && /Samantha|Ava|Allison|Google US English|Zira|Karen/i.test(v.name))
-    || vs.find(v => /en[-_]US/i.test(v.lang) && !odd.test(v.name))
-    || vs.find(v => /^en/i.test(v.lang) && !odd.test(v.name)) || null;
+  const en = vs.filter(v => /^en/i.test(v.lang) && !odd.test(v.name));
+  const us = en.filter(v => /en[-_]US/i.test(v.lang));
+  enVoice = us.find(v => /\(Premium\)|Premium/i.test(v.name))          // 가장 좋은 목소리부터
+    || us.find(v => /\(Enhanced\)|Enhanced/i.test(v.name))
+    || us.find(v => /Samantha|Ava|Allison|Joanna|Google US English/i.test(v.name))
+    || us.find(v => v.localService) || us[0] || en[0] || null;
+  koVoice = vs.find(v => /ko/i.test(v.lang) && /Premium|Enhanced/i.test(v.name)) || koVoice;
 }
 if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
 function utter(text, lang) {
   const u = new SpeechSynthesisUtterance(text);
-  if (lang === 'en') { u.lang = 'en-US'; if (enVoice) u.voice = enVoice; u.rate = 0.7; u.pitch = 1.06; }
-  else { u.lang = 'ko-KR'; if (koVoice) u.voice = koVoice; u.rate = 0.98; u.pitch = 1.14; }
+  if (lang === 'en') {
+    u.lang = 'en-US'; if (enVoice) u.voice = enVoice;
+    const words = String(text).trim().split(/\s+/).length;
+    u.rate = words <= 2 ? 0.58 : 0.72;   // 낱말은 아주 또박또박, 문장은 조금 빠르게
+    u.pitch = 1.04; u.volume = 1;
+  } else { u.lang = 'ko-KR'; if (koVoice) u.voice = koVoice; u.rate = 1.0; u.pitch = 1.12; }
   return u;
 }
+const GAP = ' ';  // 말 사이 쉼 (읽히지 않는 빈 말)
 function speak() {
   if (!soundOn || !('speechSynthesis' in window)) return;
   try { speechSynthesis.cancel(); for (const it of arguments) { if (!it || !it[0]) continue; speechSynthesis.speak(utter(it[0], it[1])); } } catch (e) {}
@@ -1190,13 +1199,43 @@ function speakQuestion() {
   if (Q.en) it.push([Q.en, 'en'], [Q.en, 'en']);
   speak.apply(null, it);
 }
-// 맞히거나 틀린 뒤엔 영어를 두 번 읽고 뜻도 알려줘요
+// 정답을 여러 번 반복해서 들려줘요 : 영어 → 뜻 → 영어
 function speakAnswer(head) {
   if (!Q) return;
+  const en = Q.read || Q.hintEn || Q.ans;
   const it = []; if (head) it.push([head, 'ko']);
-  it.push([Q.read || Q.hintEn, 'en'], [Q.read || Q.hintEn, 'en']);
-  if (Q.hintKo) it.push([Q.hintKo, 'ko']);
+  it.push([en, 'en'], [GAP, 'ko'], [en, 'en']);
+  if (Q.hintKo) it.push([Q.hintKo, 'ko'], [GAP, 'ko'], [en, 'en']);
   speak.apply(null, it);
+}
+// 틀렸을 때 : 내가 고른 것이 무슨 뜻인지 + 정답이 무엇인지 설명해 줘요
+let wrongL1 = '', wrongL2 = '';
+function explainWrong(ch) {
+  const en = Q.hintEn || Q.ans, say = [['땡!', 'ko']];
+  wrongL1 = ''; wrongL2 = '';
+  if (Q.play === 'order') {
+    const want = Q.seq[seqIdx];
+    wrongL1 = `"${ch}" 말고`; wrongL2 = `"${want}" 부터 맞혀요!`;
+    say.push([`${ch} 말고`, /[A-Za-z]/.test(ch) ? 'en' : 'ko'], ['먼저', 'ko'], [want, /[A-Za-z]/.test(want) ? 'en' : 'ko'], ['부터 맞혀 보자.', 'ko']);
+  } else if (ch) {
+    const isEn = /[A-Za-z]/.test(ch.t);
+    const plain = t => String(t).replace(/[.!?]+$/, '');
+    if (isEn) {
+      wrongL1 = ch.ko ? `내가 쏜 "${ch.t}" = ${ch.ko}` : `내가 쏜 건 "${ch.t}"`;
+      say.push(['네가 쏜 건', 'ko'], [ch.t, 'en']);
+      if (ch.ko) say.push([jo(plain(ch.ko), ['이', '']) + '라는 뜻이야.', 'ko']);
+    } else {
+      wrongL1 = ch.en ? `내가 고른 "${ch.t}" = ${ch.en}` : `내가 고른 건 "${ch.t}"`;
+      say.push(['네가 고른 건', 'ko'], [plain(ch.t), 'ko']);
+      if (ch.en) say.push(['영어로는', 'ko'], [ch.en, 'en']);
+    }
+    wrongL2 = `정답은 "${Q.ans}"` + (Q.hintKo && Q.hintKo !== Q.ans ? ` · ${Q.hintKo}` : '');
+    say.push([GAP, 'ko'], ['정답은', 'ko'], [en, 'en'], [GAP, 'ko']);
+    if (Q.hintKo) say.push([Q.hintKo, 'ko']);
+    say.push([en, 'en']);
+  }
+  showAnsT = 330;
+  speak.apply(null, say);
 }
 
 /* ================= 그리기 도구 ================= */
@@ -1257,9 +1296,12 @@ function makeBG() {
 }
 
 /* ================= 문제 ================= */
+const FLY_LEN = 520;   // 자유 비행 구간 (약 9초)
 function startQuiz() {
-  mode = 'quiz'; modeT = 0; tries = 0; seqIdx = 0; showAnsT = 0;
+  mode = 'quiz'; modeT = 0; tries = 0; seqIdx = 0; showAnsT = 0; wrongL1 = wrongL2 = '';
   if (P.inv < 40) P.inv = 40;
+  for (const f of foes) f.vx = -14;   // 남은 장애물은 빠르게 지나가요
+  efire.length = 0;
   Q = makeQ(sIndex, reviewMode);
   targets = [];
   if (Q.play === 'order') {
@@ -1287,13 +1329,13 @@ function placeTargets(n, kind) { // 정답 타깃이 떠 있을 자리
 function makeTarget(text, ok, i, p, kind) {
   return { text, ok, kind, i, x: p.x + 460 + i * 60, hx: p.x, y: p.y, y0: p.y, t: Math.random() * 60, dead: 0, hit: 0, w: 0, h: 0 };
 }
-function answerWrong(what) {
+function answerWrong(ch) {
   tries++; misses++;
-  hearts--; SFX.wrong(); shake = 10; flash = 14; P.inv = 70;
-  ansText = Q.ans; showAnsT = 210;
+  hearts--; SFX.wrong(); shake = 10; flash = 14; P.inv = 90;
+  ansText = Q.ans;
   if (Q.key && Q.word) { markWrong(Q.key); if (!session.wrong.some(x => x.w === Q.word.w)) session.wrong.push({ w: Q.word.w, k: Q.word.k }); }
   else if (Q.key) markWrong(Q.key);
-  speakAnswer('정답은');
+  explainWrong(ch);
   if (hearts <= 0) gameOver();
 }
 function answerRight() {
@@ -1310,8 +1352,8 @@ function answerRight() {
   if (first && hearts < 5) { hearts++; SFX.heal(); parts.push({ x: P.x, y: P.y, type: 'heal', life: 40, r: 10, col: '#ff5d73' }); }
   SFX.right();
   banner = { t: 0, life: 70, text: first ? pick(['멋져!', '명중!', '정답!', '최고야!']) : '좋았어!', sub: '★+' + bonus, col: '#ffd23f' };
-  speakAnswer(null);
-  showAnsT = 0;
+  speakAnswer(pick(['딩동댕!', '정답!', '맞았어!']));
+  showAnsT = 0; wrongL1 = wrongL2 = '';
   for (const t of targets) if (!t.dead) t.dead = 2;
   mode = 'clear'; modeT = 0;
 }
@@ -1323,7 +1365,7 @@ function afterQuiz() {
   }
   qIndex++; prog = qIndex / PROG_MAX;
   if (qIndex >= PROG_MAX) { startBoss(); return; }
-  mode = 'fly'; modeT = 0; Q = null; targets = [];
+  mode = 'fly'; modeT = 0; Q = null; targets = []; wrongL1 = wrongL2 = '';
 }
 function startBoss() {
   bossHP = 3; boss = { x: VW + 200, y: 300, t: 0, hurt: 0, fireT: 90 };
@@ -1447,8 +1489,9 @@ function spawnFoe() {
   });
 }
 function spawnItems() {
-  const n = 4 + ri(0, 3), y = SKY_TOP + 60 + Math.random() * (SKY_BOT - SKY_TOP - 140), up = Math.random() < .5 ? -1 : 1;
-  for (let i = 0; i < n; i++) items.push({ x: VW + 40 + i * 46, y: y + Math.sin(i / n * Math.PI) * 60 * up, t: 0, got: 0 });
+  const n = 5 + ri(0, 3), y = SKY_TOP + 60 + Math.random() * (SKY_BOT - SKY_TOP - 140), up = Math.random() < .5 ? -1 : 1;
+  for (let i = 0; i < n; i++) items.push({ x: VW + 40 + i * 44, y: y + Math.sin(i / n * Math.PI) * 70 * up, t: 0, kind: 'star' });
+  if (hearts < 5 && Math.random() < 0.35) items.push({ x: VW + 40 + n * 44 + 90, y: SKY_TOP + 60 + Math.random() * (SKY_BOT - SKY_TOP - 120), t: 0, kind: 'heart' });
 }
 
 /* ================= 업데이트 ================= */
@@ -1473,13 +1516,13 @@ function update(dt) {
 
   // 구간 진행
   if (mode === 'fly') {
-    if (modeT % (96 / S.foe) < dt) spawnFoe();
-    if (modeT > 40 && modeT % 150 < dt) spawnItems();
-    if (modeT > 240) startQuiz();
-  } else if (mode === 'quiz') {
-    if (modeT % (150 / S.foe) < dt && modeT > 40) spawnFoe();
+    if (modeT < FLY_LEN - 110 && modeT % (78 / S.foe) < dt) spawnFoe();
+    if (modeT > 40 && modeT < FLY_LEN - 120 && modeT % 118 < dt) spawnItems();
+    if (modeT > FLY_LEN) startQuiz();
   } else if (mode === 'clear') {
-    if (modeT > 108) afterQuiz();
+    // 정답을 다 읽어 줄 때까지 기다렸다가 다음 구간으로 (너무 오래 걸리면 그냥 넘어가요)
+    const talking = soundOn && ('speechSynthesis' in window) && speechSynthesis.speaking;
+    if ((modeT > 150 && !talking) || modeT > 660) afterQuiz();
   }
 
   // 미사일
@@ -1499,8 +1542,9 @@ function update(dt) {
     if (!gone && mode === 'quiz' && Q && Q.play !== 'gate') {
       for (const t of targets) {
         if (t.dead) continue;
-        const hw = Math.max(50, t.w / 2), hh = Math.max(26, t.h / 2);
-        if (Math.abs(b.x - t.x) < hw && Math.abs(b.y - t.y) < hh) { gone = true; hitTarget(t); break; }
+        const hw = Math.max(58, (t.pw || 60) / 2 + 10);
+        const up = (t.ph || 40) / 2 + (t.kind === 'blimp' ? 48 : 10), dn = (t.ph || 40) / 2 + 10;
+        if (Math.abs(b.x - t.x) < hw && b.y > t.y - up && b.y < t.y + dn) { gone = true; hitTarget(t); break; }
       }
     }
     if (!gone && boss && bossHP > 0 && Math.abs(b.x - boss.x) < 84 && Math.abs(b.y - boss.y) < 60) { gone = true; boss.hurt = 8; burst(b.x, b.y, '#ffd23f', 6, 2); tone(220, 0.07, 'square', 0.08); }
@@ -1530,7 +1574,11 @@ function update(dt) {
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i]; it.x -= spd * dt; it.t += dt;
     if (it.x < -30) { items.splice(i, 1); continue; }
-    if (Math.abs(it.x - P.x) < 30 && Math.abs(it.y - P.y) < 26) { items.splice(i, 1); stars++; SFX.star(); burst(it.x, it.y, '#ffd23f', 6, 1.6); }
+    if (Math.abs(it.x - P.x) < 30 && Math.abs(it.y - P.y) < 26) {
+      items.splice(i, 1);
+      if (it.kind === 'heart') { if (hearts < 5) hearts++; SFX.heal(); burst(it.x, it.y, '#ff5d73', 10, 2); floatText(it.x, it.y - 20, '❤️+1', '#ff5d73', 22); }
+      else { stars++; SFX.star(); burst(it.x, it.y, '#ffd23f', 6, 1.6); }
+    }
   }
   // 문제 타깃
   if (mode === 'quiz' || mode === 'clear') {
@@ -1573,13 +1621,13 @@ function hitTarget(t) {
       t.dead = 1; seqIdx++; SFX.gate(); burst(t.x, t.y, '#3fb96b', 14, 2.4); floatText(t.x, t.y - 30, t.text, '#3fb96b', 24);
       if (seqIdx >= Q.seq.length) answerRight();
     } else {
-      t.hit = 16; answerWrong();
+      t.hit = 20; answerWrong(t.text);
       if (hearts > 0) { seqIdx = 0; for (const o of targets) if (o.dead === 1) { o.dead = 0; o.x = VW + 120 + o.i * 150; } }
     }
     return;
   }
   if (t.ok) { t.dead = 1; explode(t.x, t.y, '#3fb96b'); answerRight(); }
-  else { t.hit = 16; SFX.wrong(); answerWrong(); }
+  else { t.hit = 20; answerWrong(Q.choices ? Q.choices.find(c => c.t === t.text) : null); }
 }
 function hurt() {
   if (P.inv > 0) return;
@@ -1730,6 +1778,10 @@ function drawEFire(b) {
   g.restore();
 }
 function drawItem(it) {
+  if (it.kind === 'heart') {
+    g.save(); g.translate(it.x, it.y); g.scale(1 + Math.sin(it.t * 0.08) * 0.08, 1 + Math.sin(it.t * 0.08) * 0.08);
+    setFont(30); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('❤️', 0, 0); g.restore(); return;
+  }
   g.save(); g.translate(it.x, it.y); g.rotate(Math.sin(it.t * 0.05) * 0.3);
   g.beginPath();
   for (let k = 0; k < 10; k++) { const r = k % 2 ? 5 : 12, a = -Math.PI / 2 + k * Math.PI / 5; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
@@ -1887,10 +1939,26 @@ function drawPanel() {
     g.fillText(got + ' ▢', cx, y + h - 13);
   }
   // 정답 알려주기
-  if (showAnsT > 0) {
-    const s = textFit('정답은 "' + ansText + '"', w - 60, 22, 12);
-    setFont(s); g.fillStyle = '#e63946'; g.textAlign = 'center';
-    g.fillText('정답은 "' + ansText + '" 야!', cx, y + h + 16);
+  if (showAnsT > 0 && (wrongL1 || wrongL2)) {
+    const bw = Math.min(w + 40, 700), bh = 52, bx = cx - bw / 2, by = y + h + 6;
+    g.globalAlpha = Math.min(1, showAnsT / 30);
+    fillRR(bx, by, bw, bh, 14, 'rgba(255,240,242,.96)'); rr(bx, by, bw, bh, 14); stroke(3.4, '#e63946');
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    let s1 = textFit(wrongL1, bw - 26, 17, 11); setFont(s1); g.fillStyle = '#8a5560'; g.fillText(wrongL1, cx, by + 16);
+    let s2 = textFit(wrongL2, bw - 26, 21, 12); setFont(s2); g.fillStyle = '#e63946'; g.fillText(wrongL2, cx, by + 37);
+    g.globalAlpha = 1;
+  }
+}
+function drawFlyHint() {
+  if (mode !== 'fly') return;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  if (modeT < 110) {
+    g.globalAlpha = Math.min(1, (110 - modeT) / 30);
+    outText('✈️ 자유 비행 — 장애물을 피해 ⭐을 모아요', VW / 2, 52, 24, '#fff', 7);
+    g.globalAlpha = 1;
+  } else if (modeT > FLY_LEN - 110) {
+    const blink = Math.sin(frame * 0.24) > -0.2;
+    if (blink) outText('❓ 곧 문제가 나와요!', VW / 2, 52, 28, '#ffd23f', 8);
   }
 }
 function drawBanner() {
@@ -1921,6 +1989,7 @@ function draw() {
     drawPlane();
     drawParts(1);
     drawPanel();
+    drawFlyHint();
     drawHUD();
     drawBanner();
   } else {
