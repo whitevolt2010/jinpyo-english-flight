@@ -107,6 +107,11 @@ button:focus-visible{outline:4px solid #fff;outline-offset:3px}
     <button class="pill" id="reviewB">📘 틀린 낱말 복습</button>
     <button class="pill" id="backT">처음으로</button>
   </div>
+  <div class="maprow">
+    <button class="pill" id="voiceB">🔊 영어 소리 시험</button>
+    <button class="pill" id="voiceNext">🔁 다른 목소리로</button>
+  </div>
+  <p class="sub" id="voiceInfo"></p>
   <p class="sub" id="memInfo"></p>
 </div>
 
@@ -1163,35 +1168,83 @@ function musicStart() {
 }
 
 /* ================= 말하기 ================= */
-let koVoice = null, enVoice = null;
+let koVoice = null, enVoice = null, enList = [], enIdx = 0, enOK = false;
+const VOICE_KEY = 'jinpyo-sky-voice-v1';
+// 장난 목소리와 '받아 놓지 않은' 프리미엄 목소리를 피하고, 확실히 소리가 나는 목소리부터 써요
+const ODD = /Albert|Bad News|Good News|Bahh|Bells|Boing|Bubbles|Cellos|Jester|Organ|Superstar|Trinoids|Whisper|Wobble|Zarvox|Deranged|Hysterical|Junior|Ralph|Fred|Kathy|Princess|Bruce|Rocko|Shelley|Grandma|Grandpa|Eddy|Flo|Reed|Sandy|Novelty/i;
+const EN_PREF = ['Samantha', 'Alex', 'Ava', 'Allison', 'Susan', 'Google US English', 'Microsoft Zira - English (United States)', 'Karen', 'Tessa', 'Daniel', 'Moira'];
+function buildEnList() {
+  const vs = speechSynthesis.getVoices();
+  const en = vs.filter(v => /^en/i.test(v.lang) && !ODD.test(v.name));
+  const us = en.filter(v => /en[-_]US/i.test(v.lang));
+  const out = [];
+  const add = v => { if (v && out.indexOf(v) < 0) out.push(v); };
+  for (const p of EN_PREF) add(us.find(v => v.name === p) || en.find(v => v.name === p));
+  for (const v of us) if (!/\(Premium\)|\(Enhanced\)/i.test(v.name)) add(v);   // 기본으로 깔린 목소리 먼저
+  for (const v of en) if (!/\(Premium\)|\(Enhanced\)/i.test(v.name)) add(v);
+  for (const v of us) add(v);
+  for (const v of en) add(v);
+  out.push(null);   // 그래도 안 되면 기기 기본 목소리
+  return out;
+}
 function pickVoice() {
   const vs = speechSynthesis.getVoices();
-  koVoice = vs.find(v => /ko[-_]KR/i.test(v.lang) && /Yuna|유나|Sora|Google/i.test(v.name)) || vs.find(v => /^ko/i.test(v.lang)) || null;
-  const odd = /Albert|Bad News|Good News|Bahh|Bells|Boing|Bubbles|Cellos|Jester|Organ|Superstar|Trinoids|Whisper|Wobble|Zarvox|Deranged|Hysterical|Junior|Ralph|Fred|Kathy|Princess|Bruce|Rocko|Shelley|Grandma|Grandpa|Eddy|Flo|Reed|Sandy/i;
-  const en = vs.filter(v => /^en/i.test(v.lang) && !odd.test(v.name));
-  const us = en.filter(v => /en[-_]US/i.test(v.lang));
-  enVoice = us.find(v => /\(Premium\)|Premium/i.test(v.name))          // 가장 좋은 목소리부터
-    || us.find(v => /\(Enhanced\)|Enhanced/i.test(v.name))
-    || us.find(v => /Samantha|Ava|Allison|Joanna|Google US English/i.test(v.name))
-    || us.find(v => v.localService) || us[0] || en[0] || null;
-  koVoice = vs.find(v => /ko/i.test(v.lang) && /Premium|Enhanced/i.test(v.name)) || koVoice;
+  koVoice = vs.find(v => /ko[-_]KR/i.test(v.lang) && /Yuna|유나|Sora/i.test(v.name)) || vs.find(v => /^ko/i.test(v.lang)) || null;
+  enList = buildEnList();
+  let saved = null; try { saved = localStorage.getItem(VOICE_KEY); } catch (e) {}
+  if (saved) { const k = enList.findIndex(v => v && v.name === saved); if (k >= 0) enIdx = k; }
+  enVoice = enList[enIdx] || null;
 }
 if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
 function utter(text, lang) {
-  const u = new SpeechSynthesisUtterance(text);
+  const u = new SpeechSynthesisUtterance(String(text));
   if (lang === 'en') {
     u.lang = 'en-US'; if (enVoice) u.voice = enVoice;
     const words = String(text).trim().split(/\s+/).length;
-    u.rate = words <= 2 ? 0.58 : 0.72;   // 낱말은 아주 또박또박, 문장은 조금 빠르게
+    u.rate = words <= 2 ? 0.62 : 0.78;   // 낱말은 또박또박, 문장은 조금 빠르게
     u.pitch = 1.04; u.volume = 1;
-  } else { u.lang = 'ko-KR'; if (koVoice) u.voice = koVoice; u.rate = 1.0; u.pitch = 1.12; }
+  } else { u.lang = 'ko-KR'; if (koVoice) u.voice = koVoice; u.rate = 1.0; u.pitch = 1.12; u.volume = 1; }
   return u;
 }
-const GAP = ' ';  // 말 사이 쉼 (읽히지 않는 빈 말)
+let spkToken = 0, spkTimer = null;
+function _speak(items, retry) {
+  const token = ++spkToken;
+  try { speechSynthesis.cancel(); } catch (e) {}
+  if (spkTimer) { clearTimeout(spkTimer); spkTimer = null; }
+  const enAt = items.findIndex(it => it[1] === 'en');
+  for (let i = 0; i < items.length; i++) {
+    let u;
+    try { u = utter(items[i][0], items[i][1]); } catch (e) { continue; }
+    if (i === enAt) {
+      u.onstart = () => {           // 영어가 실제로 나오기 시작하면 그 목소리를 기억해요
+        enOK = true;
+        if (spkTimer) { clearTimeout(spkTimer); spkTimer = null; }
+        try { localStorage.setItem(VOICE_KEY, enVoice ? enVoice.name : ''); } catch (e) {}
+      };
+      u.onerror = ev => {
+        const err = (ev && ev.error) || '';
+        if (token === spkToken && !enOK && !/canceled|interrupted/.test(err)) nextEnVoice(items, retry);
+      };
+    }
+    try { speechSynthesis.speak(u); } catch (e) {}
+  }
+  // 영어가 2초 안에 시작되지 않으면 다음 목소리로 바꿔서 다시 시도해요
+  if (enAt >= 0 && !enOK && retry < 5) {
+    spkTimer = setTimeout(() => { if (token === spkToken && !enOK) nextEnVoice(items, retry); }, 2000);
+  }
+}
+function nextEnVoice(items, retry) {
+  if (retry >= 5 || enIdx >= enList.length - 1) return;
+  enIdx++; enVoice = enList[enIdx];
+  _speak(items, retry + 1);
+}
 function speak() {
   if (!soundOn || !('speechSynthesis' in window)) return;
-  try { speechSynthesis.cancel(); for (const it of arguments) { if (!it || !it[0]) continue; speechSynthesis.speak(utter(it[0], it[1])); } } catch (e) {}
+  const items = [].slice.call(arguments).filter(it => it && it[0] && String(it[0]).trim().length);
+  if (items.length) _speak(items, 0);
 }
+// 크롬 계열에서 길게 읽다가 멈추는 것을 막아요
+setInterval(() => { try { if (speechSynthesis.speaking && !speechSynthesis.paused) speechSynthesis.resume(); } catch (e) {} }, 8000);
 function say(t) { speak([t, 'ko']); }
 function speakQuestion() {
   if (!Q) return;
@@ -1203,9 +1256,11 @@ function speakQuestion() {
 function speakAnswer(head) {
   if (!Q) return;
   const en = Q.read || Q.hintEn || Q.ans;
+  const isWord = String(en).trim().split(/\s+/).length <= 2;
   const it = []; if (head) it.push([head, 'ko']);
-  it.push([en, 'en'], [GAP, 'ko'], [en, 'en']);
-  if (Q.hintKo) it.push([Q.hintKo, 'ko'], [GAP, 'ko'], [en, 'en']);
+  it.push([en, 'en'], [en, 'en']);              // 영어 두 번
+  if (Q.hintKo) it.push([Q.hintKo, 'ko']);      // 뜻
+  if (isWord) it.push([en, 'en']);              // 낱말이면 한 번 더
   speak.apply(null, it);
 }
 // 틀렸을 때 : 내가 고른 것이 무슨 뜻인지 + 정답이 무엇인지 설명해 줘요
@@ -1230,7 +1285,7 @@ function explainWrong(ch) {
       if (ch.en) say.push(['영어로는', 'ko'], [ch.en, 'en']);
     }
     wrongL2 = `정답은 "${Q.ans}"` + (Q.hintKo && Q.hintKo !== Q.ans ? ` · ${Q.hintKo}` : '');
-    say.push([GAP, 'ko'], ['정답은', 'ko'], [en, 'en'], [GAP, 'ko']);
+    say.push(['정답은', 'ko'], [en, 'en']);
     if (Q.hintKo) say.push([Q.hintKo, 'ko']);
     say.push([en, 'en']);
   }
@@ -2016,6 +2071,7 @@ function renderMap() {
   $('totalStars').textContent = '★ ' + tot;
   const learned = Object.keys(mem).length, strong = Object.values(mem).filter(m => m.lv >= 3).length;
   const weak = Object.values(mem).filter(m => m.miss > 0 && m.lv < 3).length;
+  voiceLabel('');
   $('memInfo').textContent = learned ? `지금까지 만난 낱말 ${learned}개 · 잘 아는 낱말 ${strong}개 · 다시 볼 낱말 ${weak}개` : '틀린 낱말은 저장해 두었다가 곧 다시 내줘요 📘';
   document.querySelectorAll('.scard').forEach(b => b.addEventListener('click', () => { SFX.tap(); startStage(+b.dataset.i, false); }));
 }
@@ -2024,6 +2080,30 @@ function startStage(i, review) {
   newRun(i, review); show(null); state = 'play';
   say(review ? '틀린 낱말 복습 비행 출발!' : STAGES[i].name + ' 출격!');
 }
+function voiceLabel(msg) {
+  const n = enVoice ? enVoice.name : '기기 기본 목소리';
+  $('voiceInfo').textContent = (msg || '') + ' 영어 목소리: ' + n + (enOK ? ' ✅ 들려요' : '');
+}
+$('voiceB').addEventListener('click', () => {
+  audioInit(); SFX.tap(); enOK = false;
+  const was = soundOn; soundOn = true;
+  speak(['영어 소리 시험이에요.', 'ko'], ['Hello! I am your English pilot.', 'en']);
+  soundOn = was;
+  voiceLabel('소리가 안 들리면 🔁 를 눌러요 ·');
+  setTimeout(() => voiceLabel(enOK ? '' : '소리가 안 들리면 🔁 를 눌러요 ·'), 2600);
+});
+$('voiceNext').addEventListener('click', () => {
+  audioInit(); SFX.tap();
+  if (!enList.length) pickVoice();
+  enIdx = (enIdx + 1) % Math.max(1, enList.length);
+  enVoice = enList[enIdx] || null; enOK = false;
+  try { localStorage.setItem(VOICE_KEY, enVoice ? enVoice.name : ''); } catch (e) {}
+  const was = soundOn; soundOn = true;
+  speak(['이 목소리는 어때요?', 'ko'], ['Hello! Can you hear me?', 'en']);
+  soundOn = was;
+  voiceLabel('');
+  setTimeout(() => voiceLabel(''), 2600);
+});
 $('startB').addEventListener('click', () => { audioInit(); SFX.tap(); renderMap(); show('map'); state = 'map'; say('몇 학년 하늘로 갈까?'); });
 $('backT').addEventListener('click', () => { SFX.tap(); show('title'); state = 'title'; });
 $('reviewB').addEventListener('click', () => {
