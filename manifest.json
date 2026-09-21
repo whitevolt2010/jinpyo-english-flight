@@ -1,0 +1,17 @@
+{
+  "name": "진표의 영어 비행단",
+  "short_name": "영어 비행단",
+  "description": "하늘을 날며 영어 낱말과 문장을 배우는 게임 (초1~초6)",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#0d1430",
+  "theme_color": "#0d1430",
+  "lang": "ko",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
