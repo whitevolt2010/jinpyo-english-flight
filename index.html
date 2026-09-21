@@ -1318,17 +1318,17 @@ function explainWrong(ch) {
   wrongL1 = ''; wrongL2 = '';
   if (Q.play === 'order') {
     const want = Q.seq[seqIdx];
-    wrongL1 = `"${ch}" 말고`; wrongL2 = `"${want}" 부터 맞혀요!`;
+    wrongL1 = `"${ch}" 말고`; wrongL2 = `"${want}" 문으로 먼저 들어가요!`;
     say.push([ch, /[A-Za-z]/.test(ch) ? 'en' : 'ko'], ['말고', 'ko'], ['먼저', 'ko'], [want, /[A-Za-z]/.test(want) ? 'en' : 'ko'], ['부터 맞혀 보자.', 'ko']);
   } else if (ch) {
     const isEn = /[A-Za-z]/.test(ch.t);
     const plain = t => String(t).replace(/[.!?]+$/, '');
     if (isEn) {
-      wrongL1 = ch.ko ? `내가 쏜 "${ch.t}" = ${ch.ko}` : `내가 쏜 건 "${ch.t}"`;
-      say.push(['네가 쏜 건', 'ko'], [ch.t, 'en']);
+      wrongL1 = ch.ko ? `내가 들어간 "${ch.t}" = ${ch.ko}` : `내가 들어간 문은 "${ch.t}"`;
+      say.push(['네가 고른 건', 'ko'], [ch.t, 'en']);
       if (ch.ko) say.push(['뜻은', 'ko'], [plain(ch.ko), 'ko']);
     } else {
-      wrongL1 = ch.en ? `내가 고른 "${ch.t}" = ${ch.en}` : `내가 고른 건 "${ch.t}"`;
+      wrongL1 = ch.en ? `내가 들어간 "${ch.t}" = ${ch.en}` : `내가 들어간 문은 "${ch.t}"`;
       say.push(['네가 고른 건', 'ko'], [plain(ch.t), 'ko']);
       if (ch.en) say.push(['영어로는', 'ko'], [ch.en, 'en']);
     }
@@ -1413,10 +1413,10 @@ function startQuiz() {
     const pos = placeTargets(its.length, 'block');
     its.forEach((t, i) => targets.push(makeTarget(t, false, i, pos[i], 'block')));
   } else {
-    const kind = Q.play === 'gate' ? 'gate' : 'blimp';
-    const pos = placeTargets(Q.choices.length, kind);
-    Q.choices.forEach((c, i) => targets.push(makeTarget(c.t, c.ok, i, pos[i], kind)));
+    const pos = placeTargets(Q.choices.length, 'gate');
+    Q.choices.forEach((c, i) => targets.push(makeTarget(c.t, c.ok, i, pos[i], 'gate')));
   }
+  for (const t of targets) fitTarget(t);   // 크기를 미리 재 둬요 (부딪힘 판정에 써요)
   setTimeout(speakQuestion, 260);
 }
 function placeTargets(n, kind) { // 정답 타깃이 떠 있을 자리
@@ -1431,7 +1431,7 @@ function placeTargets(n, kind) { // 정답 타깃이 떠 있을 자리
   return pos;
 }
 function makeTarget(text, ok, i, p, kind) {
-  return { text, ok, kind, i, x: p.x + 460 + i * 60, hx: p.x, y: p.y, y0: p.y, t: Math.random() * 60, dead: 0, hit: 0, w: 0, h: 0 };
+  return { text, ok, kind, i, x: p.x + 460 + i * 60, hx: p.x, y: p.y, y0: p.y, t: Math.random() * 60, dead: 0, hit: 0, cool: 0, w: 0, h: 0 };
 }
 function answerWrong(ch) {
   tries++; misses++;
@@ -1601,6 +1601,11 @@ function spawnFoe() {
     rot: 0, vr: k === 'rock' ? (Math.random() - .5) * 0.05 : 0, fireT: 60 + Math.random() * 80, r: k === 'rock' ? 26 : 22,
   });
 }
+function spawnStarBalloon() {
+  const y = SKY_TOP + 50 + Math.random() * (SKY_BOT - SKY_TOP - 100);
+  foes.push({ kind: 'sbal', soft: 1, x: VW + 50, y, y0: y, t: Math.random() * 100, hp: 1,
+    vx: -(spd * 0.75), amp: 34, rot: 0, vr: 0, fireT: 1e9, r: 22, col: ['#ff7bb0', '#7bd4ff', '#ffd23f', '#9ae66e', '#c9a7ff'][ri(0, 4)] });
+}
 function spawnItems() {
   const n = 5 + ri(0, 3), y = SKY_TOP + 60 + Math.random() * (SKY_BOT - SKY_TOP - 140), up = Math.random() < .5 ? -1 : 1;
   for (let i = 0; i < n; i++) items.push({ x: VW + 40 + i * 44, y: y + Math.sin(i / n * Math.PI) * 70 * up, t: 0, kind: 'star' });
@@ -1619,7 +1624,7 @@ function update(dt) {
   const ax = (keys.r - keys.l) * 0.85, ay = (keys.d - keys.u) * 0.85;
   P.vx = (P.vx + ax * dt) * Math.pow(0.87, dt); P.vy = (P.vy + ay * dt) * Math.pow(0.87, dt);
   if (!drag) { P.x += P.vx * dt; P.y += P.vy * dt; }
-  P.x = Math.max(60, Math.min(VW * 0.76, P.x));
+  P.x = Math.max(60, Math.min(VW * 0.88, P.x));
   P.y = Math.max(SKY_TOP + 26, Math.min(SKY_BOT - 14, P.y));
   P.tilt += (((drag ? 0 : P.vy) * 0.03) - P.tilt) * 0.2 * dt;
   P.prop += dt * 0.9;
@@ -1632,6 +1637,8 @@ function update(dt) {
     if (modeT < FLY_LEN - 110 && modeT % (78 / S.foe) < dt) spawnFoe();
     if (modeT > 40 && modeT < FLY_LEN - 120 && modeT % 118 < dt) spawnItems();
     if (modeT > FLY_LEN) startQuiz();
+  } else if (mode === 'quiz') {
+    if (modeT > 60 && modeT % 120 < dt) spawnStarBalloon();
   } else if (mode === 'clear') {
     // 정답을 다 읽어 줄 때까지 기다렸다가 다음 구간으로 (너무 오래 걸리면 그냥 넘어가요)
     const talking = soundOn && spkBusy;
@@ -1647,17 +1654,13 @@ function update(dt) {
       if (f.dead) continue;
       if (Math.abs(b.x - f.x) < f.r && Math.abs(b.y - f.y) < f.r) {
         f.hp--; gone = true; burst(b.x, b.y, '#fff3a8', 7, 2);
-        if (f.hp <= 0) { f.dead = 1; explode(f.x, f.y, '#ffb43f'); stars++; floatText(f.x, f.y - 24, '★+1', '#ffd23f', 20); }
+        if (f.hp <= 0) {
+          f.dead = 1;
+          if (f.soft) { burst(f.x, f.y, f.col, 18, 2.6); SFX.star(); stars += 2; floatText(f.x, f.y - 24, '★+2', '#ffd23f', 22); }
+          else { explode(f.x, f.y, '#ffb43f'); stars++; floatText(f.x, f.y - 24, '★+1', '#ffd23f', 20); }
+        }
         else SFX.pop();
         break;
-      }
-    }
-    if (!gone && mode === 'quiz' && Q && Q.play !== 'gate') {
-      for (const t of targets) {
-        if (t.dead) continue;
-        const hw = Math.max(58, (t.pw || 60) / 2 + 10);
-        const up = (t.ph || 40) / 2 + (t.kind === 'blimp' ? 48 : 10), dn = (t.ph || 40) / 2 + 10;
-        if (Math.abs(b.x - t.x) < hw && b.y > t.y - up && b.y < t.y + dn) { gone = true; hitTarget(t); break; }
       }
     }
     if (!gone && boss && bossHP > 0 && Math.abs(b.x - boss.x) < 84 && Math.abs(b.y - boss.y) < 60) { gone = true; boss.hurt = 8; burst(b.x, b.y, '#ffd23f', 6, 2); tone(220, 0.07, 'square', 0.08); }
@@ -1675,7 +1678,7 @@ function update(dt) {
       if (f.fireT <= 0 && f.x < VW - 40) { f.fireT = 140 + Math.random() * 120; efire.push({ x: f.x - 18, y: f.y, vx: -5.2 - sIndex * 0.25, vy: (P.y - f.y) * 0.004, t: 0 }); tone(330, 0.1, 'sawtooth', 0.08, 0, 180); }
     }
     if (f.dead || f.x < -70) { foes.splice(i, 1); continue; }
-    if (P.inv <= 0 && Math.abs(f.x - P.x) < f.r + 4 && Math.abs(f.y - P.y) < f.r - 2) { explode(f.x, f.y, '#ff5d73'); foes.splice(i, 1); hurt(); }
+    if (!f.soft && P.inv <= 0 && Math.abs(f.x - P.x) < f.r + 4 && Math.abs(f.y - P.y) < f.r - 2) { explode(f.x, f.y, '#ff5d73'); foes.splice(i, 1); hurt(); }
   }
   // 적 총알
   for (let i = efire.length - 1; i >= 0; i--) {
@@ -1704,11 +1707,13 @@ function update(dt) {
       t.y = t.y0 + Math.sin(t.t * 0.03 + t.i) * 12;
       if (t.hit > 0) t.hit -= dt;
     }
-    // 문 통과 판정
-    if (Q && Q.play === 'gate' && mode === 'quiz') {
+    // 문 안으로 들어가면 그 답을 고른 거예요
+    if (mode === 'quiz') {
       for (const t of targets) {
         if (t.dead) continue;
-        if (Math.abs(t.x - P.x) < 46 && Math.abs(t.y - P.y) < 62) { hitTarget(t); break; }
+        if (t.cool > 0) { t.cool -= dt; continue; }
+        const hw = (t.gw || 110) / 2 + 4, hh = (t.gh || 110) / 2 - 6;
+        if (Math.abs(t.x - P.x) < hw && Math.abs(t.y - P.y) < hh) { hitTarget(t); break; }
       }
     }
   }
@@ -1732,15 +1737,22 @@ function hitTarget(t) {
   if (Q.play === 'order') {
     if (t.text === Q.seq[seqIdx]) {
       t.dead = 1; seqIdx++; SFX.gate(); burst(t.x, t.y, '#3fb96b', 14, 2.4); floatText(t.x, t.y - 30, t.text, '#3fb96b', 24);
+      t.cool = 999;
       if (seqIdx >= Q.seq.length) answerRight();
     } else {
-      t.hit = 20; answerWrong(t.text);
-      if (hearts > 0) { seqIdx = 0; for (const o of targets) if (o.dead === 1) { o.dead = 0; o.x = VW + 120 + o.i * 150; } }
+      t.hit = 26; t.cool = 120;
+      P.x = Math.max(70, t.x - (t.gw || 110) / 2 - 46); P.vx = -5; P.vy = 0;
+      answerWrong(t.text);
+      if (hearts > 0) { seqIdx = 0; for (const o of targets) if (o.dead === 1) { o.dead = 0; o.x = o.hx; o.cool = 60; } }
     }
     return;
   }
   if (t.ok) { t.dead = 1; explode(t.x, t.y, '#3fb96b'); answerRight(); }
-  else { t.hit = 20; answerWrong(Q.choices ? Q.choices.find(c => c.t === t.text) : null); }
+  else {
+    t.hit = 26; t.cool = 120;
+    P.x = Math.max(70, t.x - (t.gw || 110) / 2 - 46); P.vx = -5; P.vy = 0;   // 튕겨 나와요
+    answerWrong(Q.choices ? Q.choices.find(c => c.t === t.text) : null);
+  }
 }
 function hurt() {
   if (P.inv > 0) return;
@@ -1864,6 +1876,14 @@ function drawFoe(f) {
     for (let i = 0; i < 9; i++) { const a = i / 9 * TAU, r = 24 + Math.sin(i * 2.3) * 6; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
     g.closePath(); g.fillStyle = '#8b7f9e'; g.fill(); stroke(3.4);
     circle(-6, -5, 5, '#6f6480'); circle(7, 6, 4, '#6f6480'); circle(4, -9, 3, '#6f6480');
+  } else if (f.kind === 'sbal') {
+    g.strokeStyle = 'rgba(0,0,0,.3)'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(0, 20); g.quadraticCurveTo(5, 30, 0, 38); g.stroke();
+    ell(0, 0, 19, 23, f.col); g.beginPath(); g.ellipse(0, 0, 19, 23, 0, 0, TAU); stroke(3.4);
+    g.globalAlpha = .45; ell(-7, -8, 5, 8, '#fff'); g.globalAlpha = 1;
+    g.fillStyle = '#fff'; g.beginPath();
+    for (let k = 0; k < 10; k++) { const r = k % 2 ? 4 : 9, a = -Math.PI / 2 + k * Math.PI / 5; g.lineTo(Math.cos(a) * r, Math.sin(a) * r + 1); }
+    g.closePath(); g.fill(); stroke(2, '#e8a300');
   } else if (f.kind === 'balloon') {
     g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, 14); g.lineTo(0, 30); g.stroke();
     fillRR(-8, 30, 16, 12, 3, '#b07a47'); rr(-8, 30, 16, 12, 3); stroke(2.6);
@@ -1903,61 +1923,62 @@ function drawItem(it) {
 }
 function drawTarget(t) {
   if (t.dead === 1) return;
-  g.save(); g.translate(t.x, t.y);
-  if (t.dead === 2) g.globalAlpha = Math.max(0, 1 - (t.t % 999) * 0);
-  if (t.hit > 0) { g.rotate(Math.sin(t.hit * 1.7) * 0.12); }
   const lines = t.lines || fitTarget(t);
-  const fs = t.fs, pw = t.pw, ph = t.ph;
-  if (t.kind === 'gate') {
-    // 구름 문 : 이 안으로 지나가면 선택
-    const hh = Math.max(56, ph / 2 + 22);
-    g.globalAlpha *= 0.95;
-    fillRR(-52, -hh, 104, hh * 2, 22, t.hit > 0 ? '#ffd6dc' : 'rgba(255,255,255,.82)');
-    rr(-52, -hh, 104, hh * 2, 22); stroke(5, t.hit > 0 ? '#e63946' : INK);
-    g.globalAlpha = 1;
-    fillRR(-46, -hh + 8, 92, hh * 2 - 16, 16, 'rgba(120,200,255,.35)');
-    setFont(fs); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = INK;
-    lines.forEach((ln, i) => g.fillText(ln, 0, (i - (lines.length - 1) / 2) * fs * 1.2));
-  } else if (t.kind === 'block') {
-    fillRR(-pw / 2, -ph / 2, pw, ph, 12, t.hit > 0 ? '#ffd6dc' : '#fffaf0');
-    rr(-pw / 2, -ph / 2, pw, ph, 12); stroke(4);
-    fillRR(-pw / 2 + 6, -ph / 2 + 6, pw - 12, 6, 3, 'rgba(255,255,255,.7)');
-    setFont(fs); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = INK;
-    lines.forEach((ln, i) => g.fillText(ln, 0, (i - (lines.length - 1) / 2) * fs * 1.2));
-  } else {
-    // 작은 비행선이 정답 판을 달고 날아와요
-    const by = -ph / 2 - 20, col = t.hit > 0 ? '#ff9aa8' : '#8fd3ff';
-    g.beginPath(); g.moveTo(44, by); g.lineTo(58, by - 9); g.lineTo(56, by + 9); g.closePath();
-    g.fillStyle = '#5fb0e8'; g.fill(); stroke(2.6);
-    ell(0, by, 46, 19, col); g.beginPath(); g.ellipse(0, by, 46, 19, 0, 0, TAU); stroke(3.4);
-    ell(-14, by - 5, 22, 7, 'rgba(255,255,255,.5)');
-    fillRR(-8, by - 20, 16, 7, 3, '#ffd23f');
-    g.strokeStyle = INK; g.lineWidth = 2.2;
-    g.beginPath(); g.moveTo(-20, by + 14); g.lineTo(-12, -ph / 2 - 1); g.moveTo(20, by + 14); g.lineTo(12, -ph / 2 - 1); g.stroke();
-    g.beginPath(); g.moveTo(-46, by); g.lineTo(46, by); g.strokeStyle = 'rgba(0,0,0,.12)'; g.lineWidth = 3; g.stroke();
-    fillRR(-pw / 2, -ph / 2, pw, ph, 13, t.hit > 0 ? '#ffd6dc' : '#fffaf0');
-    rr(-pw / 2, -ph / 2, pw, ph, 13); stroke(4);
-    setFont(fs); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = INK;
-    lines.forEach((ln, i) => g.fillText(ln, 0, (i - (lines.length - 1) / 2) * fs * 1.2));
+  const fs = t.fs, gw = t.gw, gh = t.gh, bad = t.hit > 0;
+  g.save(); g.translate(t.x, t.y);
+  if (t.dead === 2) g.globalAlpha = 0.85;
+  if (bad) g.rotate(Math.sin(t.hit * 1.4) * 0.05);
+  // 문틀
+  fillRR(-gw / 2, -gh / 2, gw, gh, 20, bad ? 'rgba(255,205,212,.95)' : 'rgba(255,255,255,.88)');
+  rr(-gw / 2, -gh / 2, gw, gh, 20); stroke(5, bad ? '#e63946' : INK);
+  // 안쪽 통로 (지나갈 수 있어 보이게)
+  const gd = g.createLinearGradient(0, -gh / 2, 0, gh / 2);
+  gd.addColorStop(0, bad ? 'rgba(255,150,165,.55)' : 'rgba(150,215,255,.55)');
+  gd.addColorStop(1, bad ? 'rgba(255,190,200,.35)' : 'rgba(200,240,255,.35)');
+  fillRR(-gw / 2 + 9, -gh / 2 + 9, gw - 18, gh - 18, 14, gd);
+  // 들어오라는 화살표
+  if (!bad) {
+    g.globalAlpha = 0.5 + Math.sin(frame * 0.12 + t.i) * 0.3;
+    g.strokeStyle = '#2f9cf0'; g.lineWidth = 4; g.lineCap = 'round';
+    for (let k = 0; k < 2; k++) {
+      const x = -gw / 2 + 16 + k * 11;
+      g.beginPath(); g.moveTo(x, -8); g.lineTo(x + 7, 0); g.lineTo(x, 8); g.stroke();
+    }
+    g.globalAlpha = t.dead === 2 ? 0.85 : 1;
+  }
+  // 글씨
+  setFont(fs); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = INK;
+  lines.forEach((ln, k) => g.fillText(ln, 4, (k - (lines.length - 1) / 2) * fs * 1.22));
+  // 틀린 문은 X
+  if (bad) {
+    g.strokeStyle = '#e63946'; g.lineWidth = 7; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-18, -18); g.lineTo(18, 18); g.moveTo(18, -18); g.lineTo(-18, 18); g.stroke();
+  }
+  // 위아래 등불
+  for (const sy of [-1, 1]) {
+    const cy = sy * (gh / 2);
+    circle(-gw / 2 + 18, cy, 4.5, bad ? '#e63946' : '#ffd23f');
+    circle(gw / 2 - 18, cy, 4.5, bad ? '#e63946' : '#ffd23f');
   }
   g.restore(); g.globalAlpha = 1;
 }
 function fitTarget(t) {
-  const maxW = t.kind === 'gate' ? 84 : 210, ko = /[가-힯]/.test(t.text);
-  for (let n = 1; n <= 3; n++) {
+  const maxW = t.kind === 'block' ? 190 : 240, ko = /[\uAC00-\uD7AF]/.test(t.text);
+  let done = false;
+  for (let n = 1; n <= 3 && !done; n++) {
     const parts = splitLines(t.text, n);
     for (let fs = ko ? 24 : 30; fs >= 11; fs--) {
       setFont(fs);
       let w = 0; for (const p of parts) w = Math.max(w, g.measureText(p).width);
-      if (w + 18 <= maxW) {
-        t.lines = parts; t.fs = fs; t.pw = Math.max(54, w + 20);
-        t.ph = Math.max(38, parts.length * fs * 1.25 + 14);
-        t.w = t.pw; t.h = t.ph;
-        return parts;
-      }
+      if (w + 18 <= maxW) { t.lines = parts; t.fs = fs; t.pw = w + 20; t.ph = parts.length * fs * 1.25 + 8; done = true; break; }
     }
   }
-  t.lines = [t.text]; t.fs = 11; t.pw = maxW; t.ph = 38; t.w = maxW; t.h = 38;
+  if (!done) { t.lines = [t.text]; t.fs = 11; t.pw = maxW; t.ph = 26; }
+  const pad = t.kind === 'block' ? 26 : 34;
+  t.gw = Math.max(t.kind === 'block' ? 92 : 132, t.pw + pad + 26);
+  t.gh = Math.max(t.kind === 'block' ? 86 : 104, t.ph + pad + 20);
+  if (t.kind !== 'block') t.gh = Math.min(t.gh, 118);   // 세 문이 위아래로 겹치지 않게
+  t.w = t.gw; t.h = t.gh;
   return t.lines;
 }
 function splitLines(txt, n) {
@@ -2081,6 +2102,13 @@ function drawFlyHint() {
     if (blink) outText('❓ 곧 문제가 나와요!', VW / 2, 52, 28, '#ffd23f', 8);
   }
 }
+function drawQuizHint() {
+  if (mode !== 'quiz' || modeT > 200) return;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.globalAlpha = Math.min(1, (200 - modeT) / 40);
+  outText('🛩️ 정답 문으로 날아 들어가요!', 262, SKY_BOT - 44, 22, '#fff', 7);
+  g.globalAlpha = 1;
+}
 function drawBanner() {
   if (!banner) return;
   const t = banner.t, k = Math.min(1, t / 8), out = Math.max(0, Math.min(1, (banner.life - t) / 10));
@@ -2110,6 +2138,7 @@ function draw() {
     drawParts(1);
     drawPanel();
     drawFlyHint();
+    drawQuizHint();
     drawHUD();
     drawBanner();
   } else {
