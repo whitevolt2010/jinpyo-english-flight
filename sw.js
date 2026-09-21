@@ -1,5 +1,5 @@
 /* 진표의 영어 비행단 — 오프라인에서도 놀 수 있게 해 주는 일꾼 */
-const CACHE = 'jinpyo-sky-v3';
+const CACHE = 'jinpyo-sky-v4';
 const CORE = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
